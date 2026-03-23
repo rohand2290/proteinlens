@@ -26,13 +26,13 @@ spec:
             - name: http
               containerPort: 7474
           env:
-            - name: NEO4J_PASSWORD
+            - name: GRAPH_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: neo4j-secret
                   key: password
             - name: NEO4J_AUTH
-              value: "neo4j/$(NEO4J_PASSWORD)"
+              value: "neo4j/$(GRAPH_DB_PASSWORD)"
           resources:
             {{- toYaml .Values.neo4j.resources | nindent 12 }}
           volumeMounts:

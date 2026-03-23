@@ -139,22 +139,26 @@ export default function ProteinGraph({ nodes, edges }: Props) {
     return <p className="text-gray-500 text-sm">No nodes to display.</p>
   }
 
+  const clusterCounts = nodes.reduce<Record<number, number>>((acc, n) => {
+    acc[n.clusterId] = (acc[n.clusterId] ?? 0) + 1
+    return acc
+  }, {})
+
   return (
-    <div className="relative">
+    <div>
       <div
         ref={containerRef}
-        className="w-full rounded-lg bg-gray-950 border border-gray-800"
-        style={{ height: 480 }}
+        className="w-full rounded bg-gray-950 border border-gray-800"
+        style={{ height: 500 }}
       />
-      {/* Cluster legend */}
-      <div className="mt-3 flex flex-wrap gap-3">
-        {Array.from(new Set(nodes.map(n => n.clusterId))).sort().map(cid => (
-          <div key={cid} className="flex items-center gap-1.5 text-xs text-gray-400">
+      <div className="mt-3 flex flex-wrap gap-4">
+        {Object.keys(clusterCounts).map(Number).sort().map(cid => (
+          <div key={cid} className="flex items-center gap-2 text-xs text-gray-500">
             <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
+              className="inline-block h-2 w-2 rounded-sm flex-shrink-0"
               style={{ backgroundColor: clusterColor(cid) }}
             />
-            Cluster {cid}
+            <span className="text-white font-medium">{clusterCounts[cid]}</span> proteins
           </div>
         ))}
       </div>

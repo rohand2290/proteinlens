@@ -65,34 +65,38 @@ export default function IngestPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-1">Ingest Protein Network</h1>
-      <p className="text-gray-400 text-sm mb-6">
-        Submit protein identifiers to fetch interaction data from STRING-DB and run spectral analysis.
+      <h1 className="text-xl font-semibold mb-1 tracking-tight">Ingest Protein Network</h1>
+      <p className="text-gray-500 text-sm mb-8">
+        Fetch interaction data from STRING-DB and run spectral cluster analysis.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-6 bg-gray-900 rounded-xl border border-gray-800 p-6">
+      <form onSubmit={handleSubmit} className="space-y-7">
         <div>
-          <label className="block text-sm font-medium text-gray-200 mb-2">
+          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
             Protein Identifiers
           </label>
           <textarea
             value={identifierText}
             onChange={e => setIdentifierText(e.target.value)}
             placeholder={'TP53\nMDM2\nBRCA1\nEGFR'}
-            rows={6}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm font-mono text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+            rows={8}
+            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm font-mono text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 resize-y"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1.5 text-xs text-gray-600">
             One per line, or comma/space-separated. Accepts gene names, UniProt IDs, or ENSP IDs.
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-200 mb-2">
-            Confidence Threshold —{' '}
-            <span className="text-indigo-400 font-semibold">{requiredScore}</span>
-            <span className="ml-2 text-gray-400 font-normal text-xs">{confidenceLabel(requiredScore)}</span>
-          </label>
+          <div className="flex items-baseline justify-between mb-2">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Confidence Threshold
+            </label>
+            <span className="text-sm font-mono text-white">
+              {requiredScore}
+              <span className="ml-2 text-xs text-gray-500 font-sans">{confidenceLabel(requiredScore)}</span>
+            </span>
+          </div>
           <input
             type="range"
             min={0}
@@ -100,58 +104,62 @@ export default function IngestPage() {
             step={50}
             value={requiredScore}
             onChange={e => setRequiredScore(Number(e.target.value))}
-            className="w-full accent-indigo-500"
+            className="w-full accent-white"
           />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>0 (none)</span>
-            <span>400 (medium)</span>
-            <span>700 (high)</span>
-            <span>1000 (max)</span>
+          <div className="flex justify-between text-xs text-gray-600 mt-1.5">
+            <span>0</span>
+            <span>400</span>
+            <span>700</span>
+            <span>1000</span>
           </div>
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold transition-colors"
+          className="w-full py-2.5 px-4 rounded bg-white text-gray-950 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-semibold transition-opacity hover:opacity-90"
         >
           {loading ? 'Submitting…' : 'Run Ingestion'}
         </button>
       </form>
 
       {error && (
-        <div className="mt-4 rounded-lg bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-300">
+        <div className="mt-6 border border-red-800 bg-red-950/40 px-4 py-3 rounded text-sm text-red-300">
           {error}
         </div>
       )}
 
       {result && (
-        <div className="mt-4 rounded-lg bg-gray-900 border border-gray-700 px-4 py-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                result.status === 'SUCCESS' ? 'bg-emerald-400' : 'bg-yellow-400'
-              }`}
-            />
-            <span className="text-sm font-semibold">{result.status}</span>
+        <div className="mt-6 border border-gray-800 rounded">
+          <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+            <span className={`text-xs font-semibold uppercase tracking-wider ${
+              result.status === 'SUCCESS' ? 'text-emerald-400' : 'text-yellow-400'
+            }`}>
+              {result.status}
+            </span>
+            <span className="text-xs font-mono text-gray-600 truncate ml-4">{result.jobId}</span>
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-            <dt className="text-gray-400">Job ID</dt>
-            <dd className="font-mono text-gray-200 truncate">{result.jobId}</dd>
-            <dt className="text-gray-400">Proteins ingested</dt>
-            <dd className="text-gray-200">{result.proteinsIngested}</dd>
-            <dt className="text-gray-400">Interactions ingested</dt>
-            <dd className="text-gray-200">{result.interactionsIngested}</dd>
-          </dl>
+          <div className="grid grid-cols-2 divide-x divide-gray-800">
+            <div className="px-4 py-4">
+              <p className="text-2xl font-semibold tabular-nums">{result.proteinsIngested}</p>
+              <p className="text-xs text-gray-500 mt-0.5">proteins</p>
+            </div>
+            <div className="px-4 py-4">
+              <p className="text-2xl font-semibold tabular-nums">{result.interactionsIngested}</p>
+              <p className="text-xs text-gray-500 mt-0.5">interactions</p>
+            </div>
+          </div>
           {result.errorMessage && (
-            <p className="text-xs text-yellow-400">{result.errorMessage}</p>
+            <div className="px-4 py-2 border-t border-gray-800 text-xs text-yellow-400">{result.errorMessage}</div>
           )}
-          <button
-            onClick={() => router.push(`/graph/?jobId=${result.jobId}`)}
-            className="mt-2 w-full py-2 px-4 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-medium transition-colors"
-          >
-            View Graph &amp; Spectrum →
-          </button>
+          <div className="px-4 py-3 border-t border-gray-800">
+            <button
+              onClick={() => router.push(`/graph/?jobId=${result.jobId}`)}
+              className="text-sm text-gray-300 hover:text-white transition-colors"
+            >
+              View graph &amp; spectrum →
+            </button>
+          </div>
         </div>
       )}
     </div>

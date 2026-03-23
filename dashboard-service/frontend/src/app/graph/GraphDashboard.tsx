@@ -81,62 +81,63 @@ export default function GraphDashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Network Analysis</h1>
-        <p className="text-gray-400 text-sm font-mono">Job: {jobId}</p>
+    <div className="space-y-10">
+      <div className="flex items-baseline justify-between border-b border-gray-800 pb-4">
+        <h1 className="text-xl font-semibold tracking-tight">Network Analysis</h1>
+        <span className="text-xs font-mono text-gray-600">{jobId}</span>
       </div>
 
       {loading && (
-        <div className="text-gray-400 text-sm animate-pulse">Loading graph data…</div>
+        <div className="text-gray-600 text-sm">Loading…</div>
       )}
 
       {/* Protein interaction graph */}
-      <section className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-        <h2 className="text-base font-semibold mb-3">Protein Interaction Network</h2>
+      <section>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Protein Interaction Network</h2>
+          {graph && (
+            <div className="flex gap-5 text-xs text-gray-500 tabular-nums">
+              <span><span className="text-white font-medium">{graph.nodes.length}</span> proteins</span>
+              <span><span className="text-white font-medium">{graph.edges.length}</span> interactions</span>
+              {spectral && (
+                <span><span className="text-white font-medium">{spectral.kStar}</span> cluster{spectral.kStar !== 1 ? 's' : ''}</span>
+              )}
+            </div>
+          )}
+        </div>
         {graphError ? (
           <p className="text-red-400 text-sm">{graphError}</p>
         ) : graph ? (
-          <>
-            <div className="flex gap-4 mb-3 text-xs text-gray-400">
-              <span>{graph.nodes.length} proteins</span>
-              <span>{graph.edges.length} interactions</span>
-              {spectral && (
-                <span className="text-indigo-300">
-                  {spectral.kStar} natural cluster{spectral.kStar !== 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
-            <ProteinGraph nodes={graph.nodes} edges={graph.edges} />
-          </>
+          <ProteinGraph nodes={graph.nodes} edges={graph.edges} />
         ) : !loading ? (
-          <p className="text-gray-500 text-sm">No graph data for this job.</p>
+          <p className="text-gray-600 text-sm">No graph data for this job.</p>
         ) : null}
       </section>
 
       {/* Eigenvalue spectrum */}
-      <section className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-        <h2 className="text-base font-semibold mb-1">Eigenvalue Spectrum</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Sorted eigenvalues of the normalized Laplacian L<sub>sym</sub>. The vertical marker
-          indicates the spectral gap (k* = {spectral?.kStar ?? '—'}).
+      <section>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Eigenvalue Spectrum</h2>
+          {spectral && (
+            <div className="flex gap-5 text-xs text-gray-500 tabular-nums">
+              <span>k* = <span className="text-white font-medium">{spectral.kStar}</span></span>
+              <span>max gap = <span className="text-white font-medium font-mono">{spectral.maxGap.toFixed(4)}</span></span>
+              <span>converged in <span className="text-white font-medium">{spectral.convergedIn}</span> iters</span>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-gray-600 mb-4">
+          Sorted eigenvalues of the normalized Laplacian L<sub>sym</sub>. Vertical marker indicates the spectral gap.
         </p>
         {spectralError ? (
           <p className="text-red-400 text-sm">{spectralError}</p>
         ) : spectral ? (
-          <>
-            <div className="flex gap-6 mb-4 text-xs text-gray-400">
-              <span>k* = <span className="text-indigo-300 font-semibold">{spectral.kStar}</span></span>
-              <span>max gap = <span className="text-indigo-300 font-semibold">{spectral.maxGap.toFixed(4)}</span></span>
-              <span>converged in <span className="text-indigo-300 font-semibold">{spectral.convergedIn}</span> iterations</span>
-            </div>
-            <EigenvalueChart
-              eigenvalues={spectral.eigenvalues}
-              spectralGapIndex={spectral.spectralGapIndex}
-            />
-          </>
+          <EigenvalueChart
+            eigenvalues={spectral.eigenvalues}
+            spectralGapIndex={spectral.spectralGapIndex}
+          />
         ) : !loading ? (
-          <p className="text-gray-500 text-sm">No spectral data for this job.</p>
+          <p className="text-gray-600 text-sm">No spectral data for this job.</p>
         ) : null}
       </section>
     </div>
