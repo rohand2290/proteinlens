@@ -39,7 +39,7 @@ public class SpectralResultWriter {
      * @param nodeIndexMap maps each protein stringId to its matrix row/column index
      * @param result       output of {@link SpectralAnalyzerService#analyze}
      */
-    @Transactional
+    @Transactional("transactionManager")
     public void write(ComputeJobDto job, NodeIndexMap nodeIndexMap, SpectralResult result) {
         List<Map<String, Object>> proteinRows = buildProteinRows(job, nodeIndexMap, result);
 

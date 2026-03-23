@@ -1,0 +1,18 @@
+server:
+  port: 8080
+
+spring:
+  neo4j:
+    uri: ${SPRING_NEO4J_URI:bolt://localhost:7687}
+    authentication:
+      username: neo4j
+      password: ${NEO4J_PASSWORD:password}
+
+ingestion-service:
+  base-url: ${INGESTION_SERVICE_URL:http://localhost:8081}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

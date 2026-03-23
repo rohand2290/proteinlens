@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proteinlens-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "proteinlens.labels" . | nindent 4 }}
+data:
+  # In-cluster service addresses derived from the release namespace.
+  # Services read these via envFrom so no address is hardcoded in any Deployment.
+  SPRING_NEO4J_URI: bolt://neo4j.{{ .Release.Namespace }}.svc.cluster.local:7687
+  KAFKA_BOOTSTRAP_SERVERS: kafka.{{ .Release.Namespace }}.svc.cluster.local:9092
+  INGESTION_SERVICE_URL: http://ingestion-service.{{ .Release.Namespace }}.svc.cluster.local:8081
+  KAFKA_TOPIC: {{ .Values.kafka.topic | quote }}

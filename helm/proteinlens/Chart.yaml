@@ -1,0 +1,14 @@
+apiVersion: v2
+name: proteinlens
+description: Protein interaction network ingestion, spectral analysis, and visualization platform
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
+keywords:
+  - bioinformatics
+  - protein
+  - graph
+  - neo4j
+  - kafka
+maintainers:
+  - name: proteinlens

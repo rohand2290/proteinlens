@@ -1,0 +1,47 @@
+ProteinLens has been deployed to namespace: {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ACCESS THE DASHBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{- if .Values.ingress.enabled }}
+  Add the following to /etc/hosts (local clusters only):
+    127.0.0.1  {{ .Values.ingress.host }}
+
+  Then open: http://{{ .Values.ingress.host }}
+
+  For minikube, use the tunnel instead:
+    minikube tunnel
+{{- else }}
+  Ingress is disabled. Port-forward to reach the dashboard:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/dashboard-service 8080:8080
+
+  Then open: http://localhost:8080
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NEO4J BROWSER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  kubectl port-forward -n {{ .Release.Namespace }} svc/neo4j 7474:7474 7687:7687
+  Open: http://localhost:7474  (neo4j / <your password>)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  KEDA AUTOSCALING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{- if .Values.graphComputeService.keda.enabled }}
+  KEDA ScaledObject is active. graph-compute-service will scale
+  between {{ .Values.graphComputeService.keda.minReplicaCount }} and {{ .Values.graphComputeService.keda.maxReplicaCount }} replicas
+  based on consumer lag on topic: {{ .Values.kafka.topic }}
+{{- else }}
+  KEDA autoscaling is disabled. To enable:
+    helm upgrade {{ .Release.Name }} ./helm/proteinlens \
+      --set graphComputeService.keda.enabled=true
+  Requires KEDA installed in the cluster: https://keda.sh/docs/latest/deploy/
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECURITY REMINDER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  The default Neo4j password is "password". Change it for any
+  non-local environment:
+    helm upgrade {{ .Release.Name }} ./helm/proteinlens \
+      --set neo4j.password=<your-secret>

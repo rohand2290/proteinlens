@@ -1,0 +1,85 @@
+neo4j:
+  # Override at install time — do not commit real passwords.
+  # helm install proteinlens ./helm/proteinlens --set neo4j.password=<secret>
+  password: "password"
+  image:
+    repository: neo4j
+    tag: "5.18-community"
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+kafka:
+  image:
+    repository: apache/kafka
+    tag: "3.7.0"
+  storage: 5Gi
+  topic: ingestion.events
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+ingestionService:
+  replicaCount: 1
+  image:
+    repository: proteinlens/ingestion-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+graphComputeService:
+  image:
+    repository: proteinlens/graph-compute-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  # Set keda.enabled=true if KEDA is installed in your cluster.
+  # Autoscales replicas based on ingestion.events consumer lag.
+  keda:
+    enabled: false
+    consumerGroup: graph-compute-service
+    minReplicaCount: 1
+    maxReplicaCount: 5
+    lagThreshold: "10"
+
+dashboardService:
+  replicaCount: 1
+  image:
+    repository: proteinlens/dashboard-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  # For local clusters: add "127.0.0.1 proteinlens.local" to /etc/hosts
+  host: proteinlens.local
+  annotations: {}

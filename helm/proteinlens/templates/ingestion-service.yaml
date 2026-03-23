@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "proteinlens.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingestion-service
+spec:
+  replicas: {{ .Values.ingestionService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "proteinlens.selectorLabels" (dict "component" "ingestion-service" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "proteinlens.selectorLabels" (dict "component" "ingestion-service" "root" .) | nindent 8 }}
+    spec:
+      containers:
+        - name: ingestion-service
+          image: {{ .Values.ingestionService.image.repository }}:{{ .Values.ingestionService.image.tag }}
+          imagePullPolicy: {{ .Values.ingestionService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: proteinlens-config
+          env:
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: neo4j-secret
+                  key: password
+          resources:
+            {{- toYaml .Values.ingestionService.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "proteinlens.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingestion-service
+spec:
+  selector:
+    {{- include "proteinlens.selectorLabels" (dict "component" "ingestion-service" "root" .) | nindent 4 }}
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-compute-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "proteinlens.labels" . | nindent 4 }}
+    app.kubernetes.io/component: graph-compute-service
+spec:
+  # Replica count is managed by KEDA when keda.enabled=true;
+  # otherwise defaults to 1. Do not set >1 without a Kafka partition strategy.
+  replicas: {{ if .Values.graphComputeService.keda.enabled }}{{ .Values.graphComputeService.keda.minReplicaCount }}{{ else }}1{{ end }}
+  selector:
+    matchLabels:
+      {{- include "proteinlens.selectorLabels" (dict "component" "graph-compute-service" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "proteinlens.selectorLabels" (dict "component" "graph-compute-service" "root" .) | nindent 8 }}
+    spec:
+      containers:
+        - name: graph-compute-service
+          image: {{ .Values.graphComputeService.image.repository }}:{{ .Values.graphComputeService.image.tag }}
+          imagePullPolicy: {{ .Values.graphComputeService.image.pullPolicy }}
+          # No HTTP port — background worker only.
+          envFrom:
+            - configMapRef:
+                name: proteinlens-config
+          env:
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: neo4j-secret
+                  key: password
+          resources:
+            {{- toYaml .Values.graphComputeService.resources | nindent 12 }}
+{{- if .Values.graphComputeService.keda.enabled }}
+---
+# Autoscales graph-compute-service replicas based on consumer lag on
+# the ingestion.events topic. Requires KEDA installed in the cluster.
+# https://keda.sh/docs/latest/scalers/apache-kafka/
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: graph-compute-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "proteinlens.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: graph-compute-service
+  minReplicaCount: {{ .Values.graphComputeService.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.graphComputeService.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka.{{ .Release.Namespace }}.svc.cluster.local:9092
+        consumerGroup: {{ .Values.graphComputeService.keda.consumerGroup }}
+        topic: {{ .Values.kafka.topic }}
+        lagThreshold: {{ .Values.graphComputeService.keda.lagThreshold | quote }}
+        offsetResetPolicy: earliest
+{{- end }}

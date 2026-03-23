@@ -18,9 +18,7 @@ import java.util.List;
 /**
  * Thin client wrapping the STRING-DB REST API.
  *
- * Relevant STRING-DB endpoints used here:
- *   POST /json/network               — network for a set of proteins
- *   POST /json/interaction_partners  — interaction partners of a protein
+ * Endpoint used: POST /json/network — interaction network for a set of proteins.
  *
  * STRING-DB API docs: https://string-db.org/help/api/
  */
@@ -83,41 +81,4 @@ public class StringDbClient {
                 .doOnError(e -> log.error("STRING-DB network request failed: {}", e.getMessage()));
     }
 
-    /**
-     * Fetches interaction partners for a single protein.
-     *
-     * @param identifier   gene name, UniProt ID, or STRING ID
-     * @param speciesTaxonId NCBI taxon ID; null uses default
-     * @param minScore     minimum confidence score; null uses default
-     * @param limit        max number of partners to return (STRING-DB default is 10)
-     */
-    public Mono<List<StringDbInteractionDto>> fetchInteractionPartners(
-            String identifier,
-            Integer speciesTaxonId,
-            Integer minScore,
-            Integer limit) {
-
-        int species = speciesTaxonId != null ? speciesTaxonId : defaultSpecies;
-        int score = minScore != null ? minScore : requiredScore;
-
-        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add("identifiers", identifier);
-        formData.add("species", String.valueOf(species));
-        formData.add("required_score", String.valueOf(score));
-        formData.add("caller_identity", callerIdentity);
-        if (limit != null) {
-            formData.add("limit", String.valueOf(limit));
-        }
-
-        log.debug("Fetching STRING-DB interaction partners for '{}', species={}", identifier, species);
-
-        return stringDbWebClient.post()
-                .uri("/json/interaction_partners")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(BodyInserters.fromFormData(formData))
-                .retrieve()
-                .bodyToMono(INTERACTION_LIST)
-                .doOnSuccess(list -> log.debug("Received {} partners for '{}'", list.size(), identifier))
-                .doOnError(e -> log.error("STRING-DB partners request failed for '{}': {}", identifier, e.getMessage()));
-    }
 }

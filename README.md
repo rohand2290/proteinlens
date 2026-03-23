@@ -191,13 +191,23 @@ MATCH (sr:SpectralResult {jobId: '<jobId>'}) RETURN sr
 
 ## Deployment
 
-Kubernetes manifests are in [`k8s/`](k8s/) covering:
+A Helm chart is in [`helm/proteinlens/`](helm/proteinlens/) covering all five services (Neo4j, Kafka, ingestion-service, graph-compute-service, dashboard-service) plus an nginx Ingress.
 
-| File | Contents |
-|---|---|
-| `namespace.yml` | `proteinlens` namespace |
-| `neo4j.yml` | Neo4j StatefulSet + Service |
-| `kafka.yml` | Kafka Deployment + Service |
-| `ingestion-service.yml` | Deployment + ClusterIP Service |
+```bash
+# Install into a 'proteinlens' namespace
+helm install proteinlens ./helm/proteinlens \
+  --namespace proteinlens --create-namespace \
+  --set neo4j.password=<secret>
+```
 
-Services use a `neo4j-secret` Kubernetes Secret for the Neo4j password and communicate via in-cluster DNS (e.g. `neo4j.proteinlens.svc.cluster.local`).
+Key values (override with `--set` or a custom `values.yaml`):
+
+| Value | Default | Description |
+|---|---|---|
+| `neo4j.password` | `password` | Neo4j auth password — always override in production |
+| `ingress.host` | `proteinlens.local` | Hostname for the nginx Ingress |
+| `ingress.className` | `nginx` | Ingress class |
+| `graphComputeService.keda.enabled` | `false` | Enable KEDA autoscaling on Kafka consumer lag |
+| `graphComputeService.keda.maxReplicaCount` | `5` | Max replicas under KEDA autoscaling |
+
+For local clusters, add `127.0.0.1 proteinlens.local` to `/etc/hosts` to reach the Ingress.
