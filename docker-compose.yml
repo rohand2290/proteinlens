@@ -57,5 +57,36 @@ services:
       timeout: 5s
       retries: 10
 
+  graph-compute-service:
+    build: ./graph-compute-service
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      NEO4J_PASSWORD: password
+      SPRING_NEO4J_URI: bolt://neo4j:7687
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+  dashboard-service:
+    build: ./dashboard-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      ingestion-service:
+        condition: service_healthy
+    environment:
+      NEO4J_PASSWORD: password
+      SPRING_NEO4J_URI: bolt://neo4j:7687
+      INGESTION_SERVICE_URL: http://ingestion-service:8081
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   neo4j_data:

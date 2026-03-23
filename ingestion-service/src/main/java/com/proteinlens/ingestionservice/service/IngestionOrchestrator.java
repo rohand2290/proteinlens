@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Orchestrates the full ingestion pipeline:
@@ -44,11 +46,19 @@ public class IngestionOrchestrator {
             int interactionsWritten = neo4jIngestionService.persist(interactions);
             int proteinsWritten = neo4jIngestionService.countDistinctProteins(interactions);
 
-            // 3. Publish event
+            // 3. Collect the resolved STRING IDs that were actually written to Neo4j
+            //    (original identifiers are gene names; Neo4j stores ENSP-based stringIds)
+            List<String> resolvedStringIds = interactions.stream()
+                    .flatMap(dto -> Stream.of(dto.getStringIdA(), dto.getStringIdB()))
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            // 4. Publish event
             IngestionEventDto event = IngestionEventDto.builder()
                     .jobId(jobId)
                     .status(IngestionEventDto.Status.SUCCESS)
-                    .identifiers(request.getIdentifiers())
+                    .identifiers(resolvedStringIds)
                     .speciesTaxonId(request.getSpeciesTaxonId())
                     .interactionsIngested(interactionsWritten)
                     .proteinsIngested(proteinsWritten)

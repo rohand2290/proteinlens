@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: graph-compute-service
+
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: ${NEO4J_PASSWORD:password}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: graph-compute-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.proteinlens.*"
+        spring.json.value.default.type: com.proteinlens.graphcomputeservice.dto.ComputeJobDto
+
+kafka:
+  topics:
+    ingestion-events: ingestion.events
+
+logging:
+  level:
+    com.proteinlens: DEBUG

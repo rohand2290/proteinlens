@@ -59,7 +59,7 @@ public class StringDbClient {
             Integer speciesTaxonId,
             Integer minScore) {
 
-        String joinedIds = String.join("%0d", identifiers); // STRING-DB uses %0d as separator
+        String joinedIds = String.join("\r", identifiers); // STRING-DB expects identifiers separated by \r (%0d)
         int species = speciesTaxonId != null ? speciesTaxonId : defaultSpecies;
         int score = minScore != null ? minScore : requiredScore;
 
