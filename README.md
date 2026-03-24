@@ -114,9 +114,10 @@ The number of natural clusters in the graph is estimated by finding the largest 
 $$
 i^* = \underset{i \in \{1,\ldots,n-1\}}{\arg\max} \; (\lambda_{i+1} - \lambda_i)
 $$
+and
 
 $$
-k^{*} = i^{*} + 1, \quad \Delta^{*} = \lambda_{{i^{*}+1}} - \lambda_{i^{*}}
+k^{*} = i^{*} + 1, \quad \Delta^{*} = \lambda_{i^{*}+1} - \lambda_{i^{*}}
 $$
 
 A large gap after $\lambda_{k^*}$ indicates that the first $k^*$ eigenvectors capture the dominant cluster structure while the remaining eigenvectors describe within-cluster variation. $k^*$ and $\Delta^*$ are stored as `kStar` and `maxGap` in the `SpectralResult`.
