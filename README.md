@@ -114,7 +114,6 @@ The number of natural clusters in the graph is estimated by finding the largest 
 $$
 i^* = \underset{i \in \{1,\ldots,n-1\}}{\arg\max} \; (\lambda_{i+1} - \lambda_i)
 $$
-and
 
 $$
 k^{*} = i^{*} + 1, \quad \Delta^{*} = \lambda_{i^{*}+1} - \lambda_{i^{*}}
