@@ -123,7 +123,7 @@ Build the embedding matrix $U \in \mathbb{R}^{n \times k^*}$ whose columns are t
 
 $$U = \begin{bmatrix} u_1 & u_2 & \cdots & u_{k^*} \end{bmatrix}$$
 
-Each row $U_{i,:}$ is then $\ell^2$-normalized to the unit sphere. This row-normalization (Ng–Jordan–Weiss trick) reduces sensitivity to eigenvalue magnitude and makes the cluster structure more robust when there are outlier proteins with very high or very low degree.
+Each row $U_{i,:}$ is then $\ell^{2}$-normalized to the unit sphere. This row-normalization (Ng–Jordan–Weiss trick) reduces sensitivity to eigenvalue magnitude and makes the cluster structure more robust when there are outlier proteins with very high or very low degree.
 
 K-means++ is then run on the rows of $U$ with $k = k^*$ clusters (Apache Commons Math `KMeansPlusPlusClusterer`, seeded deterministically). The resulting cluster assignments map each protein to a cluster in $\{0, \ldots, k^* - 1\}$ and are written back to each `Protein` node's `clusterId` property.
 
