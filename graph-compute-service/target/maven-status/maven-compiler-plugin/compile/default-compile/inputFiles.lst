@@ -1,0 +1,14 @@
+/app/src/main/java/com/proteinlens/graphcomputeservice/GraphComputeServiceApplication.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/config/KafkaConfig.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/dto/ComputeJobDto.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/model/NodeIndexMap.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/model/ProteinSubgraph.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/model/SpectralResult.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/model/SubgraphEdge.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/repository/SubgraphRepository.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/service/GraphComputeWorker.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/service/IngestionEventConsumer.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/service/Neo4jWriterService.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/service/NormalizedLaplacianService.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/service/SpectralAnalyzerService.java
+/app/src/main/java/com/proteinlens/graphcomputeservice/service/SpectralResultWriter.java

@@ -41,6 +41,13 @@
             <artifactId>spring-kafka</artifactId>
         </dependency>
 
+        <!-- Spectral clustering -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-math3</artifactId>
+            <version>3.6.1</version>
+        </dependency>
+
         <!-- EJML — dense/sparse matrix ops for graph algorithms -->
         <dependency>
             <groupId>org.ejml</groupId>

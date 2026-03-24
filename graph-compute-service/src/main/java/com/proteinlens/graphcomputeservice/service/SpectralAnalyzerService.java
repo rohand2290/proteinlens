@@ -11,9 +11,16 @@ import org.ejml.interfaces.decomposition.EigenDecomposition_F64;
 import org.ejml.ops.DConvertMatrixStruct;
 import org.springframework.stereotype.Service;
 
+import org.apache.commons.math3.ml.clustering.CentroidCluster;
+import org.apache.commons.math3.ml.clustering.Clusterable;
+import org.apache.commons.math3.ml.clustering.KMeansPlusPlusClusterer;
+import org.apache.commons.math3.ml.distance.EuclideanDistance;
+import org.apache.commons.math3.random.JDKRandomGenerator;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Random;
+import java.util.List;
 
 /**
  * Performs spectral analysis on a normalized symmetric Laplacian L_sym.
@@ -32,7 +39,7 @@ public class SpectralAnalyzerService {
     private static final int MAX_KMEANS_ITER  = 300;
     private static final int MAX_POWER_ITER   = 1000;
     private static final double POWER_TOL     = 1e-9;
-    private static final long   KMEANS_SEED   = 42L;
+    private static final int    KMEANS_SEED   = 42;
 
     public SpectralResult analyze(DMatrixSparseCSC laplacian) {
         int n = laplacian.getNumRows();
@@ -188,122 +195,30 @@ public class SpectralAnalyzerService {
     }
 
     // -------------------------------------------------------------------------
-    // K-means++ initialization + Lloyd's iteration
+    // K-means++ via Apache Commons Math
     // -------------------------------------------------------------------------
 
     private int[] kMeans(double[] U, int n, int k) {
-        Random rng = new Random(KMEANS_SEED);
-
-        // K-means++ center initialization
-        double[] centers = new double[k * k]; // centers[c*k + dim]
-        boolean[] chosen = new boolean[n];
-
-        int first = rng.nextInt(n);
-        chosen[first] = true;
-        System.arraycopy(U, first * k, centers, 0, k);
-
-        for (int c = 1; c < k; c++) {
-            double[] dist2 = new double[n];
-            double totalDist = 0.0;
-            for (int i = 0; i < n; i++) {
-                if (chosen[i]) continue;
-                double minD = Double.MAX_VALUE;
-                for (int prev = 0; prev < c; prev++) {
-                    double d = squaredDist(U, i, centers, prev, k);
-                    if (d < minD) minD = d;
-                }
-                dist2[i] = minD;
-                totalDist += minD;
-            }
-
-            if (totalDist == 0.0) {
-                // All remaining points coincide with existing centers; pick first unchosen
-                for (int i = 0; i < n; i++) {
-                    if (!chosen[i]) {
-                        chosen[i] = true;
-                        System.arraycopy(U, i * k, centers, c * k, k);
-                        break;
-                    }
-                }
-            } else {
-                double threshold = rng.nextDouble() * totalDist;
-                double cumulative = 0.0;
-                int chosenIdx = -1;
-                for (int i = 0; i < n; i++) {
-                    cumulative += dist2[i];
-                    if (cumulative >= threshold && !chosen[i]) {
-                        chosenIdx = i;
-                        break;
-                    }
-                }
-                if (chosenIdx == -1) {
-                    // Fallback: pick last unchosen
-                    for (int i = n - 1; i >= 0; i--) {
-                        if (!chosen[i]) { chosenIdx = i; break; }
-                    }
-                }
-                chosen[chosenIdx] = true;
-                System.arraycopy(U, chosenIdx * k, centers, c * k, k);
-            }
+        List<IndexedPoint> points = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            points.add(new IndexedPoint(i, Arrays.copyOfRange(U, i * k, (i + 1) * k)));
         }
 
-        // Lloyd's iteration
-        int[] assignments  = new int[n];
-        int[] clusterSizes = new int[k];
-        double[] newCenters = new double[k * k];
+        KMeansPlusPlusClusterer<IndexedPoint> clusterer = new KMeansPlusPlusClusterer<>(
+                k, MAX_KMEANS_ITER, new EuclideanDistance(), new JDKRandomGenerator(KMEANS_SEED));
+        List<CentroidCluster<IndexedPoint>> clusters = clusterer.cluster(points);
 
-        for (int iter = 0; iter < MAX_KMEANS_ITER; iter++) {
-            int changes = 0;
-
-            // Assignment step
-            for (int i = 0; i < n; i++) {
-                int bestC = 0;
-                double bestD = Double.MAX_VALUE;
-                for (int c = 0; c < k; c++) {
-                    double d = squaredDist(U, i, centers, c, k);
-                    if (d < bestD) { bestD = d; bestC = c; }
-                }
-                if (assignments[i] != bestC) {
-                    assignments[i] = bestC;
-                    changes++;
-                }
-            }
-
-            if (changes == 0) break;
-
-            // Update step
-            Arrays.fill(newCenters, 0.0);
-            Arrays.fill(clusterSizes, 0);
-            for (int i = 0; i < n; i++) {
-                int c = assignments[i];
-                clusterSizes[c]++;
-                for (int dim = 0; dim < k; dim++) {
-                    newCenters[c * k + dim] += U[i * k + dim];
-                }
-            }
-            for (int c = 0; c < k; c++) {
-                if (clusterSizes[c] > 0) {
-                    for (int dim = 0; dim < k; dim++) {
-                        centers[c * k + dim] = newCenters[c * k + dim] / clusterSizes[c];
-                    }
-                }
-                // else: empty cluster retains its previous center
+        int[] assignments = new int[n];
+        for (int c = 0; c < clusters.size(); c++) {
+            for (IndexedPoint p : clusters.get(c).getPoints()) {
+                assignments[p.index()] = c;
             }
         }
-
         return assignments;
     }
 
-    /** Squared Euclidean distance between row i of U and center c of centers. */
-    private static double squaredDist(double[] U, int i, double[] centers, int c, int k) {
-        double sum = 0.0;
-        int uBase = i * k;
-        int cBase = c * k;
-        for (int dim = 0; dim < k; dim++) {
-            double diff = U[uBase + dim] - centers[cBase + dim];
-            sum += diff * diff;
-        }
-        return sum;
+    private record IndexedPoint(int index, double[] coords) implements Clusterable {
+        public double[] getPoint() { return coords; }
     }
 
     // -------------------------------------------------------------------------
