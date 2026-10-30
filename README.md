@@ -32,7 +32,7 @@ dashboard-service (:8080)          Next.js UI + Spring Boot API gateway
   │                                                                  ├── eigendecomposition via EJML
   │                                                                  ├── spectral gap → kStar
   │                                                                  ├── spectral embedding + K-means++
-  │                                                                  ├── power-iteration eigenvector centrality
+  │                                                                  ├── weighted PageRank centrality
   │                                                                  └──► Neo4j
   │                                                                         MERGE SpectralResult node
   │                                                                         MERGE COVERS edges
@@ -71,7 +71,7 @@ dashboard-service (:8080)          Next.js UI + Spring Boot API gateway
 (Protein)
 ```
 
-`INTERACTS_WITH` scores are raw STRING-DB combined scores (0–1000). Protein writes are MERGE-based, so re-ingesting the same proteins updates scores without creating duplicates.
+`INTERACTS_WITH` scores are stored exactly as the STRING API returns them: combined scores as floats in [0, 1] (e.g. `0.999`). Only the `requiredScore` request threshold uses the 0–1000 scale. The Laplacian is invariant to a global rescaling of weights, so downstream results do not depend on this choice. Protein writes are MERGE-based, so re-ingesting the same proteins updates scores without creating duplicates.
 
 ---
 
@@ -109,15 +109,13 @@ sorted in ascending order.
 
 ### 4. Spectral gap and natural cluster count $k^*$
 
-The number of natural clusters in the graph is estimated by finding the largest gap between consecutive eigenvalues:
+The number of natural clusters is estimated by the largest gap between consecutive eigenvalues, searched only over $k \in [c, k_\text{max}]$ where $c$ is the number of connected components (eigenvalues numerically equal to 0) and $k_\text{max}$ is `spectral.k-max` (default 20):
 
 $$
-i^* = \underset{i \in \{1,\ldots,n-1\}}{\arg\max} \; (\lambda_{i+1} - \lambda_i)
+k^{*} = \underset{k \in [c,\, k_\text{max}]}{\arg\max} \; (\lambda_{k+1} - \lambda_k), \quad \Delta^{*} = \lambda_{k^*+1} - \lambda_{k^*}
 $$
 
-$$
-k^{*} = i^{*} + 1, \quad \Delta^{*} = \lambda_{i^{*}+1} - \lambda_{i^{*}}
-$$
+Unbounded search over all $n-1$ gaps can return $k$ near $n$, or $k=1$ on a disconnected graph. A job may also carry an explicit `k`, which overrides the search (used to sweep $k$ in evaluation).
 
 A large gap after $\lambda_{k^*}$ indicates that the first $k^*$ eigenvectors capture the dominant cluster structure while the remaining eigenvectors describe within-cluster variation. $k^*$ and $\Delta^*$ are stored as `kStar` and `maxGap` in the `SpectralResult`.
 
@@ -131,15 +129,13 @@ Each row $U_{i,:}$ is then $\ell^{2}$-normalized to the unit sphere. This row-no
 
 K-means++ is then run on the rows of $U$ with $k = k^*$ clusters (Apache Commons Math `KMeansPlusPlusClusterer`, seeded deterministically). The resulting cluster assignments map each protein to a cluster in $\{0, \ldots, k^* - 1\}$ and are written back to each `Protein` node's `clusterId` property.
 
-### 6. Eigenvector centrality via power iteration
+### 6. Centrality via weighted PageRank
 
-Classical eigenvector centrality is defined on $A_\text{norm} = I - L_\text{sym} = D^{-1/2} A D^{-1/2}$, the normalized adjacency matrix. Its dominant eigenvector is the fixed point of the iteration
+An earlier version ran power iteration on $A_\text{norm} = D^{-1/2} A D^{-1/2}$ and called the result eigenvector centrality. That was wrong: the dominant eigenvector of $A_\text{norm}$ is $D^{1/2}\mathbf{1}$ (eigenvalue 1), so the iteration just returned $\sqrt{\text{weighted degree}}$. Eigenvector centrality on $A$ itself is ill-posed on the disconnected or bipartite subgraphs STRING often produces.
 
-$$v^{(t+1)} = \frac{A_\text{norm} \, v^{(t)}}{\| A_\text{norm} \, v^{(t)} \|_2}$$
+Centrality is now weighted PageRank on the raw adjacency $A$ (damping 0.85, dangling mass redistributed uniformly, stop when the L1 change is below $10^{-10}$), which converges on any graph and costs $O(\text{nnz})$ per iteration. Scores are max-normalized to $[0, 1]$.
 
-initialized with $v^{(0)} = \frac{1}{\sqrt{n}} \mathbf{1}$. The iteration runs up to 1000 steps and stops when $\| v^{(t+1)} - v^{(t)} \|_2 < 10^{-9}$. The sign convention is fixed so that the component with the largest absolute value is positive. Centrality scores are then normalized to $[0, 1]$ by dividing by the maximum component.
-
-A high centrality score indicates a protein that is highly connected to other well-connected proteins in the weighted interaction network — functionally important hub proteins like TP53 consistently score near 1.
+A high score indicates a protein that is highly connected to other well-connected proteins in the weighted interaction network.
 
 ---
 
@@ -275,6 +271,33 @@ MATCH (sr:SpectralResult {jobId: '<jobId>'})-[:COVERS]->(p:Protein) RETURN p
 -- Spectral result for a job
 MATCH (sr:SpectralResult {jobId: '<jobId>'}) RETURN sr
 ```
+
+---
+
+## Evaluation
+
+Clustering quality is measured against curated human complexes (EBI Complex Portal) on a frozen STRING v12.0 physical-interaction
+benchmark, by the same Java code the service runs (`--spring.profiles.active=cli`). Full method, table and caveats:
+[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md). On the held-out half of 565 complexes:
+
+| Method | F1 | MMR |
+| --- | --- | --- |
+| Spectral, eigengap k (service default) | 0.114 | 0.030 |
+| Spectral, k=300 (tuned) | 0.668 | 0.203 |
+| MCL (best baseline) | 0.589 | 0.192 |
+
+The default eigengap rule performs poorly on this graph, and k must be chosen by sweep to be competitive. The
+`eval-gate` workflow fails a pull request if F1 or MMR drops by more than 0.02 at either operating point.
+
+```bash
+(cd benchmarks && shasum -a 256 -c SHA256SUMS)
+java -jar graph-compute-service/target/graph-compute-service-0.0.1-SNAPSHOT.jar \
+  --spring.profiles.active=cli benchmarks/human_physical_complexportal.tsv.gz out/clusters.csv [k]
+uv run --project ml pl-eval complexes --clusters out/clusters.csv --reference benchmarks/complexportal_9606.json \
+  --baseline benchmarks/metrics_baseline.json
+```
+
+On JDK 23 or newer, add `-Dmaven.compiler.proc=full` to the Maven build so Lombok runs.
 
 ---
 

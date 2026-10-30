@@ -1,0 +1,29 @@
+name: eval-gate
+on: [pull_request]
+jobs:
+  complexes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: astral-sh/setup-uv@v5
+      - run: mvn -q -f graph-compute-service/pom.xml package
+      - run: ( cd benchmarks && sha256sum -c SHA256SUMS )
+      - run: uv run --project ml pytest -q ml/tests
+      # Production Java spectral code on the frozen benchmark, eigengap-chosen k (the service default)
+      - run: >
+          java -jar graph-compute-service/target/graph-compute-service-0.0.1-SNAPSHOT.jar
+          --spring.profiles.active=cli benchmarks/human_physical_complexportal.tsv.gz out/clusters.csv
+      - run: >
+          uv run --project ml pl-eval complexes --clusters out/clusters.csv
+          --reference benchmarks/complexportal_9606.json
+          --baseline benchmarks/metrics_baseline.json --max-drop 0.02
+      # Same code at the k chosen on the tuning half of the complexes (see benchmarks/RESULTS.md)
+      - run: >
+          java -jar graph-compute-service/target/graph-compute-service-0.0.1-SNAPSHOT.jar
+          --spring.profiles.active=cli benchmarks/human_physical_complexportal.tsv.gz out/clusters_k300.csv 300
+      - run: >
+          uv run --project ml pl-eval complexes --clusters out/clusters_k300.csv
+          --reference benchmarks/complexportal_9606.json
+          --baseline benchmarks/metrics_baseline_k300.json --max-drop 0.02
