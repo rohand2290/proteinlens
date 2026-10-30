@@ -1,14 +1,12 @@
 package com.proteinlens.graphcomputeservice.service;
 
+import com.proteinlens.graphcomputeservice.model.EigenPairs;
+import com.proteinlens.graphcomputeservice.model.GraphMatrices;
 import com.proteinlens.graphcomputeservice.model.SpectralResult;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ejml.data.Complex_F64;
-import org.ejml.data.DMatrixRMaj;
 import org.ejml.data.DMatrixSparseCSC;
-import org.ejml.dense.row.CommonOps_DDRM;
-import org.ejml.dense.row.factory.DecompositionFactory_DDRM;
-import org.ejml.interfaces.decomposition.EigenDecomposition_F64;
-import org.ejml.ops.DConvertMatrixStruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import org.apache.commons.math3.ml.clustering.CentroidCluster;
@@ -19,7 +17,6 @@ import org.apache.commons.math3.random.JDKRandomGenerator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -30,18 +27,31 @@ import java.util.List;
  *   2. Spectral gap detection → kStar (natural cluster count)
  *   3. Spectral embedding U (n × kStar), row-normalized
  *   4. K-means++ clustering on rows of U → clusterAssignments
- *   5. Power iteration on A_norm = I - L_sym → eigenvector centrality
+ *   5. Weighted PageRank on the raw adjacency → centrality
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class SpectralAnalyzerService {
 
+    private final SpectralBackend backend;
+
     private static final int MAX_KMEANS_ITER  = 300;
-    private static final int MAX_POWER_ITER   = 1000;
-    private static final double POWER_TOL     = 1e-9;
+    private static final int    MAX_PAGERANK_ITER = 200;
+    private static final double PAGERANK_TOL      = 1e-10;
+    private static final double DAMPING           = 0.85;
     private static final int    KMEANS_SEED   = 42;
 
-    public SpectralResult analyze(DMatrixSparseCSC laplacian) {
+    @Value("${spectral.k-max:20}")
+    private int kMax = 20;
+
+    public SpectralResult analyze(GraphMatrices matrices) {
+        return analyze(matrices, null);
+    }
+
+    /** @param kOverride fixed cluster count, or null to choose by bounded eigengap */
+    public SpectralResult analyze(GraphMatrices matrices, Integer kOverride) {
+        DMatrixSparseCSC laplacian = matrices.laplacian();
         int n = laplacian.getNumRows();
         log.debug("SpectralAnalyzer: n={}", n);
 
@@ -58,53 +68,27 @@ public class SpectralAnalyzerService {
                     new int[]{0}, new double[]{1.0}, 0);
         }
 
-        // --- Step 1: Convert sparse L to dense; pre-compute A_norm = I - L ---
-        // A_norm must be computed before decompose() because decompose() may mutate dense.
-        DMatrixRMaj dense = new DMatrixRMaj(n, n);
-        DConvertMatrixStruct.convert(laplacian, dense);
-
-        DMatrixRMaj aNorm = new DMatrixRMaj(n, n);
-        CommonOps_DDRM.subtract(CommonOps_DDRM.identity(n), dense, aNorm);
-
-        // --- Step 2: Symmetric eigendecomposition ---
-        EigenDecomposition_F64<DMatrixRMaj> eig = DecompositionFactory_DDRM.eig(n, true, true);
-        if (!eig.decompose(dense)) {
-            throw new IllegalStateException("Eigendecomposition failed for Laplacian n=" + n);
-        }
-
-        // --- Step 3: Collect and sort (eigenvalue, eigenvector) pairs ascending ---
-        int m = eig.getNumberOfEigenvalues();
-        EigPair[] pairs = new EigPair[m];
-        for (int i = 0; i < m; i++) {
-            Complex_F64 ev = eig.getEigenvalue(i);
-            pairs[i] = new EigPair(ev.real, eig.getEigenVector(i));
-        }
-        Arrays.sort(pairs, Comparator.comparingDouble(p -> p.value));
-
-        double[] eigenvalues = new double[m];
-        for (int i = 0; i < m; i++) {
-            eigenvalues[i] = pairs[i].value;
-        }
+        // --- Steps 1-3: smallest eigenpairs from the configured backend ---
+        // kStar is unknown until the eigenvalues are seen, so request enough vectors to cover kMax / the override.
+        // The bounded eigengap search starts at the number of connected components, so cover that too.
+        int components = connectedComponents(matrices.adjacency());
+        int wanted = Math.min(n, Math.max(Math.max(kMax, components), kOverride != null ? kOverride : 0));
+        EigenPairs pairs = backend.smallest(laplacian, wanted);
+        double[] eigenvalues = pairs.values();
+        int m = eigenvalues.length;
         log.debug("Eigenvalues computed: first={} last={}", eigenvalues[0], eigenvalues[m - 1]);
 
-        // --- Step 4: Spectral gap → kStar, maxGap ---
-        double maxGap = 0.0;
-        int kStar = 1;
-        for (int i = 0; i < m - 1; i++) {
-            double gap = eigenvalues[i + 1] - eigenvalues[i];
-            if (gap > maxGap) {
-                maxGap = gap;
-                kStar = i + 1;
-            }
-        }
+        // --- Step 4: bounded spectral gap → kStar, maxGap ---
+        int kStar = kOverride != null ? Math.max(1, Math.min(kOverride, m)) : chooseK(eigenvalues, kMax);
+        kStar = Math.min(kStar, pairs.vectors().numCols);
+        double maxGap = kStar < m ? eigenvalues[kStar] - eigenvalues[kStar - 1] : 0.0;
         log.debug("kStar={} maxGap={}", kStar, maxGap);
 
         // --- Step 5: Build embedding matrix U (n × kStar), row-major flat array ---
         double[] U = new double[n * kStar];
         for (int k = 0; k < kStar; k++) {
-            DMatrixRMaj vec = pairs[k].vector;
             for (int i = 0; i < n; i++) {
-                U[i * kStar + k] = vec.get(i, 0);
+                U[i * kStar + k] = pairs.vectors().get(i, k);
             }
         }
 
@@ -126,72 +110,88 @@ public class SpectralAnalyzerService {
         // --- Step 6: K-means++ clustering ---
         int[] assignments = kMeans(U, n, kStar);
 
-        // --- Step 7: Power iteration centrality on A_norm ---
-        double[] v     = new double[n];
-        double[] vNew  = new double[n];
-        double initVal = 1.0 / Math.sqrt(n);
-        Arrays.fill(v, initVal);
+        // --- Step 7: weighted PageRank, max-normalized to [0, 1] ---
+        int[] iters = new int[1];
+        double[] rank = pageRank(matrices.adjacency(), matrices.degree(), DAMPING, PAGERANK_TOL, MAX_PAGERANK_ITER, iters);
+        int convergedIn = iters[0];
+        log.debug("PageRank convergedIn={}", convergedIn);
 
-        int convergedIn = MAX_POWER_ITER;
-        double[] aNormData = aNorm.data; // row-major: aNormData[i*n + j]
-
-        for (int iter = 0; iter < MAX_POWER_ITER; iter++) {
-            // vNew = A_norm * v
-            for (int i = 0; i < n; i++) {
-                double sum = 0.0;
-                int rowBase = i * n;
-                for (int j = 0; j < n; j++) {
-                    sum += aNormData[rowBase + j] * v[j];
-                }
-                vNew[i] = sum;
-            }
-
-            // L2-normalize vNew
-            double norm = 0.0;
-            for (int i = 0; i < n; i++) norm += vNew[i] * vNew[i];
-            norm = Math.sqrt(norm);
-            if (norm > 0.0) {
-                for (int i = 0; i < n; i++) vNew[i] /= norm;
-            }
-
-            // Convergence check: ||vNew - v||_2
-            double delta = 0.0;
-            for (int i = 0; i < n; i++) {
-                double diff = vNew[i] - v[i];
-                delta += diff * diff;
-            }
-            delta = Math.sqrt(delta);
-
-            // Swap buffers
-            double[] tmp = v; v = vNew; vNew = tmp;
-
-            if (delta < POWER_TOL) {
-                convergedIn = iter + 1;
-                break;
-            }
-        }
-        log.debug("Power iteration convergedIn={}", convergedIn);
-
-        // Sign convention: dominant component should be positive
-        int maxAbsIdx = 0;
-        double maxAbs = 0.0;
-        for (int i = 0; i < n; i++) {
-            if (Math.abs(v[i]) > maxAbs) { maxAbs = Math.abs(v[i]); maxAbsIdx = i; }
-        }
-        if (v[maxAbsIdx] < 0.0) {
-            for (int i = 0; i < n; i++) v[i] = -v[i];
-        }
-
-        // Normalize centrality to [0, 1]
-        double maxCentrality = 0.0;
-        for (int i = 0; i < n; i++) if (v[i] > maxCentrality) maxCentrality = v[i];
-
+        double maxRank = 0.0;
+        for (double r : rank) if (r > maxRank) maxRank = r;
         double[] centrality = new double[n];
-        if (maxCentrality > 0.0) {
-            for (int i = 0; i < n; i++) centrality[i] = v[i] / maxCentrality;
+        if (maxRank > 0.0) {
+            for (int i = 0; i < n; i++) centrality[i] = rank[i] / maxRank;
         }
 
         return new SpectralResult(eigenvalues, maxGap, kStar, assignments, centrality, convergedIn);
+    }
+
+
+    // -------------------------------------------------------------------------
+    // k selection and centrality (package-private for tests)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Largest eigengap with k restricted to [number of connected components, kMax].
+     * Eigenvalues are ascending; the gap after k clusters is eig[k] - eig[k-1].
+     */
+    static int chooseK(double[] eig, int kMax) {
+        int components = 0;
+        while (components < eig.length && eig[components] < 1e-8) components++;
+        int lo = Math.max(1, components), hi = Math.min(kMax, eig.length - 1);
+        if (lo >= hi) return lo;
+        int best = lo;
+        double bestGap = -1.0;
+        for (int k = lo; k <= hi; k++) {
+            double gap = eig[k] - eig[k - 1];
+            if (gap > bestGap) { bestGap = gap; best = k; }
+        }
+        return best;
+    }
+
+    /** Number of connected components of the graph of A, by union-find over the CSC structure. */
+    static int connectedComponents(DMatrixSparseCSC a) {
+        int n = a.numCols;
+        int[] parent = new int[n];
+        for (int i = 0; i < n; i++) parent[i] = i;
+        int comps = n;
+        for (int col = 0; col < n; col++) {
+            for (int p = a.col_idx[col]; p < a.col_idx[col + 1]; p++) {
+                int x = find(parent, a.nz_rows[p]), y = find(parent, col);
+                if (x != y) { parent[x] = y; comps--; }
+            }
+        }
+        return comps;
+    }
+
+    private static int find(int[] parent, int x) {
+        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+        return x;
+    }
+
+    /** Weighted PageRank on symmetric A (CSC). Column j of A equals row j, so a column sweep is a row sweep. */
+    static double[] pageRank(DMatrixSparseCSC a, double[] degree, double damping, double tol, int maxIter, int[] itersOut) {
+        int n = a.numRows;
+        double[] r = new double[n], next = new double[n];
+        Arrays.fill(r, 1.0 / n);
+        for (int iter = 1; iter <= maxIter; iter++) {
+            double dangling = 0.0;
+            for (int i = 0; i < n; i++) if (degree[i] == 0.0) dangling += r[i];
+            Arrays.fill(next, (1.0 - damping) / n + damping * dangling / n);
+            for (int col = 0; col < n; col++) {
+                if (degree[col] == 0.0) continue;
+                double share = damping * r[col] / degree[col];
+                for (int p = a.col_idx[col]; p < a.col_idx[col + 1]; p++) {
+                    next[a.nz_rows[p]] += a.nz_values[p] * share;
+                }
+            }
+            double delta = 0.0;
+            for (int i = 0; i < n; i++) delta += Math.abs(next[i] - r[i]);
+            double[] t = r; r = next; next = t;
+            if (delta < tol) { itersOut[0] = iter; return r; }
+        }
+        itersOut[0] = maxIter;
+        return r;
     }
 
     // -------------------------------------------------------------------------
@@ -219,19 +219,5 @@ public class SpectralAnalyzerService {
 
     private record IndexedPoint(int index, double[] coords) implements Clusterable {
         public double[] getPoint() { return coords; }
-    }
-
-    // -------------------------------------------------------------------------
-    // Internal value type for sorting eigenvalue/eigenvector pairs
-    // -------------------------------------------------------------------------
-
-    private static final class EigPair {
-        final double value;
-        final DMatrixRMaj vector;
-
-        EigPair(double value, DMatrixRMaj vector) {
-            this.value  = value;
-            this.vector = vector;
-        }
     }
 }

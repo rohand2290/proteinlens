@@ -26,3 +26,8 @@ kafka:
 logging:
   level:
     com.proteinlens: DEBUG
+
+spectral:
+  backend: dense
+  dense-max-n: 3000
+  k-max: 20

@@ -6,6 +6,7 @@ import com.proteinlens.graphcomputeservice.model.SpectralResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.neo4j.core.Neo4jClient;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@Profile("!cli")
 @RequiredArgsConstructor
 public class SpectralResultWriter {
 

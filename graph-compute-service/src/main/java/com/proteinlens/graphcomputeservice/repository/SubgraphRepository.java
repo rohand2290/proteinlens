@@ -5,6 +5,7 @@ import com.proteinlens.graphcomputeservice.model.SubgraphEdge;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.neo4j.core.Neo4jClient;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.List;
  */
 @Slf4j
 @Repository
+@Profile("!cli")
 @RequiredArgsConstructor
 public class SubgraphRepository {
 

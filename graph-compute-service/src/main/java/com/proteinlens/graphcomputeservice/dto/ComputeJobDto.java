@@ -22,4 +22,7 @@ public class ComputeJobDto {
     private int proteinsIngested;
     private Instant timestamp;
     private String errorMessage;
+
+    /** Optional fixed cluster count; null selects k by bounded eigengap. */
+    private Integer k;
 }

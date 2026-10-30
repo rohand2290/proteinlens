@@ -1,0 +1,14 @@
+# Offline profile: no Kafka, no Neo4j, no web server. Used by CI to run the production spectral code.
+spring:
+  main:
+    web-application-type: none
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jRepositoriesAutoConfiguration
+
+logging:
+  level:
+    com.proteinlens: INFO

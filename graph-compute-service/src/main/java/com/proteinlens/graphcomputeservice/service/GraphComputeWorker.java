@@ -1,13 +1,14 @@
 package com.proteinlens.graphcomputeservice.service;
 
 import com.proteinlens.graphcomputeservice.dto.ComputeJobDto;
+import com.proteinlens.graphcomputeservice.model.GraphMatrices;
 import com.proteinlens.graphcomputeservice.model.NodeIndexMap;
 import com.proteinlens.graphcomputeservice.model.ProteinSubgraph;
 import com.proteinlens.graphcomputeservice.model.SpectralResult;
 import com.proteinlens.graphcomputeservice.repository.SubgraphRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ejml.data.DMatrixSparseCSC;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
  */
 @Slf4j
 @Service
+@Profile("!cli")
 @RequiredArgsConstructor
 public class GraphComputeWorker {
 
@@ -37,10 +39,10 @@ public class GraphComputeWorker {
             log.info("Loaded subgraph: nodes={}, edges={}", subgraph.nodeIds().size(), subgraph.edges().size());
 
             // Step 2: compute normalized Laplacian
-            DMatrixSparseCSC laplacian = normalizedLaplacianService.compute(subgraph);
+            GraphMatrices matrices = normalizedLaplacianService.compute(subgraph);
 
             // Step 3: spectral analysis
-            SpectralResult result = spectralAnalyzerService.analyze(laplacian);
+            SpectralResult result = spectralAnalyzerService.analyze(matrices, job.getK());
             log.info("Spectral analysis complete: kStar={}, maxGap={}, convergedIn={}",
                     result.kStar(), result.maxGap(), result.convergedIn());
 
@@ -51,7 +53,7 @@ public class GraphComputeWorker {
             log.info("Compute complete for job={}", job.getJobId());
         } catch (Exception e) {
             log.error("Compute failed for job={}: {}", job.getJobId(), e.getMessage(), e);
-            // Re-throw to trigger Kafka retry/DLQ if configured
+            // Re-throw: KafkaConfig's DefaultErrorHandler retries, then dead-letters to ingestion.events.dlq
             throw e;
         }
     }

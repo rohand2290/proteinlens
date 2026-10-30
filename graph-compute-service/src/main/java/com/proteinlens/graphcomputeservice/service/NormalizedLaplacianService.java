@@ -1,5 +1,6 @@
 package com.proteinlens.graphcomputeservice.service;
 
+import com.proteinlens.graphcomputeservice.model.GraphMatrices;
 import com.proteinlens.graphcomputeservice.model.NodeIndexMap;
 import com.proteinlens.graphcomputeservice.model.ProteinSubgraph;
 import com.proteinlens.graphcomputeservice.model.SubgraphEdge;
@@ -30,7 +31,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class NormalizedLaplacianService {
 
-    public DMatrixSparseCSC compute(ProteinSubgraph subgraph) {
+    public GraphMatrices compute(ProteinSubgraph subgraph) {
         NodeIndexMap map = NodeIndexMap.from(subgraph.nodeIds());
         int n = map.size();
 
@@ -74,15 +75,16 @@ public class NormalizedLaplacianService {
         // Scale each non-zero a[row,col] by dInvSqrt[row] * dInvSqrt[col] in one pass
         // over the CSC column arrays. Avoids CommonOps_DSCC.multRows/multColumns which
         // have an off-by-one bug in EJML 0.43.1 when the array length equals numRows/numCols.
+        // Scale a copy so the raw adjacency survives for PageRank.
+        DMatrixSparseCSC aNorm = a.copy();
         for (int col = 0; col < n; col++) {
-            int idx0 = a.col_idx[col];
-            int idx1 = a.col_idx[col + 1];
+            int idx0 = aNorm.col_idx[col];
+            int idx1 = aNorm.col_idx[col + 1];
             for (int ptr = idx0; ptr < idx1; ptr++) {
-                int row = a.nz_rows[ptr];
-                a.nz_values[ptr] *= dInvSqrt[row] * dInvSqrt[col];
+                int row = aNorm.nz_rows[ptr];
+                aNorm.nz_values[ptr] *= dInvSqrt[row] * dInvSqrt[col];
             }
         }
-        DMatrixSparseCSC aNorm = a; // a is now D^{-1/2} * A * D^{-1/2}
 
         // --- Build sparse identity matrix ---
         DMatrixSparseTriplet iTriplet = new DMatrixSparseTriplet(n, n, n);
@@ -98,6 +100,6 @@ public class NormalizedLaplacianService {
 
         log.debug("Normalized Laplacian computed: nnz={}", l.nz_length);
 
-        return l;
+        return new GraphMatrices(a, d, l);
     }
 }
