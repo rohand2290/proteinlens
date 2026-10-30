@@ -1,0 +1,10 @@
+target/
+node_modules/
+.next/
+.venv/
+mlruns/
+.DS_Store
+data/
+out/
+__pycache__/
+.pytest_cache/
